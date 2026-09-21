@@ -1,0 +1,66 @@
+# mid360_obstacle_stop - Mission 模式障碍物自动停车
+#
+# 所有参数都在这里，代码中没有 magic number。
+# 注意：节点名必须与 launch 文件中的 name= 一致（mid360_obstacle_stop）。
+mid360_obstacle_stop:
+  ros__parameters:
+
+    # ---------------- 话题 / 服务 ----------------
+    # MID360 点云（Livox ROS Driver 2，xfer_format=0 时输出 sensor_msgs/PointCloud2）
+    pointcloud_topic: "/livox/lidar"
+    # PX4 状态（px4_msgs/msg/VehicleStatus）
+    vehicle_status_topic: "/fmu/out/vehicle_status"
+    # PX4 VehicleCommand 服务（px4_msgs/srv/VehicleCommand），response 直接给 VehicleCommandAck
+    vehicle_command_service: "/fmu/vehicle_command"
+
+    # ---------------- 障碍检测（第一阶段：360° 水平安全圆柱） ----------------
+    # 危险半径：水平距离小于该值的点计入危险点
+    stop_distance: 3.0
+    # 恢复半径：只有水平距离大于该值才认为“恢复安全”（迟滞，避免反复 pause/resume）
+    resume_distance: 4.0
+    # 机体自身点云过滤：小于该水平距离的点全部忽略（起落架/机身/桨叶反射）
+    min_range: 0.5
+    # 高度 ROI（机体系 z），只统计 z_min < z < z_max 的点
+    z_min: -0.6
+    z_max: 0.8
+    # 单帧危险点数下限：低于该值不算障碍（MID360 偶发噪点）
+    min_obstacle_points: 10
+
+    # ---------------- 帧确认 / 迟滞 ----------------
+    # 连续多少帧 obstacle=true 才允许触发 Pause（中间出现一帧 clear 就清零）
+    confirm_frames: 3
+    # 连续多少帧恢复安全才允许自动 Continue（auto_resume=true 时才有意义）
+    clear_frames: 10
+
+    # ---------------- 自动恢复（第一阶段默认关闭） ----------------
+    # false: 检测到障碍 -> Pause -> PX4 Hold -> 保持 Hold，由人工决定是否继续任务
+    # true : 只有本节点自己触发的 Pause，且安全持续 clear_frames 帧后，才会自动 Continue
+    auto_resume: false
+
+    # ---------------- LiDAR watchdog ----------------
+    # 超过该时间没有收到 MID360 点云则认为点云超时（Mission 中会输出 ERROR/WARN）
+    lidar_timeout: 0.5
+    # true 时：Mission 中 LiDAR 超时会像障碍物一样触发 Pause
+    # 第一阶段默认 false，避免通信问题导致不可控的 Pause
+    lidar_timeout_stop_enabled: false
+
+    # ---------------- 地面调试诊断 ----------------
+    # > 0 时每隔该秒数打印一行检测摘要（ROI 点数 / 危险点数 / 最近距离 / 帧计数 / 当前状态）
+    # 地面调试建议设 2.0：确认无遮挡时 danger=0（起落架、天线、GPS 杆不误报）
+    # 飞行中建议保持 0.0（关闭），避免刷日志
+    diagnostic_period: 0.0
+
+    # ---------------- PX4 命令行为 ----------------
+    # do_reposition_hold: PX4 v1.16 原生做法，与 QGroundControl 的 Pause 按钮完全一致
+    #   -> VEHICLE_CMD_DO_REPOSITION(192)，param2=CHANGE_MODE，lat/lon/alt=NaN
+    #   -> PX4 切到 AUTO_LOITER(Hold)，自行减速并生成刹车停点
+    # do_pause_continue: VEHICLE_CMD_DO_PAUSE_CONTINUE(193)，PX4 v1.16 未实现
+    #   -> commander 会回 UNSUPPORTED，不要使用（保留给以后支持该命令的固件）
+    hold_method: "do_reposition_hold"
+    # 发出命令后等待 VehicleCommandAck 的超时；超时视为失败，不会进入 PAUSED
+    command_timeout: 2.0
+    # 命令失败后的重试冷却时间（服务不可用 / 临时拒绝 / 超时）
+    command_retry_cooldown: 2.0
+    # Pause 被 ACK ACCEPTED 后，等待 nav_state 变成 AUTO_LOITER 的时间；
+    # 超时会输出 ERROR（但不影响 ACK 判定逻辑）
+    hold_confirm_timeout: 2.0
