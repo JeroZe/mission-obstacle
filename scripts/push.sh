@@ -56,12 +56,6 @@ if [ "${#REMOTES[@]}" -eq 0 ]; then
   exit 1
 fi
 
-if ! git remote get-url gitee >/dev/null 2>&1; then
-  echo "提示：还没有配置 gitee 镜像远端，国内拉取会不稳定。可以执行："
-  echo "    git remote add gitee https://gitee.com/JeroZe/mission-obstacle.git"
-  echo
-fi
-
 echo "==> 暂存并提交"
 git add -A
 if git diff --cached --quiet; then
