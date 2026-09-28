@@ -25,7 +25,7 @@ PX4  VEHICLE_CMD_DO_REPOSITION(192) + NaN  →  AUTO_LOITER (Hold)
 mission-obstacle_ws/                ← 仓库根 = colcon workspace 根（目录名随意，示例用 xxx_ws）
 ├── README.md
 ├── .gitignore                     # build/ install/ log/ bags/ *.bag src/px4_msgs/
-├── scripts/push_to_github.sh      # 推送脚本
+├── scripts/push.sh                # 一次推送到 GitHub + Gitee（任一失败不影响另一个）
 └── src/                           # ★ 本仓库只跟踪这里的内容
     ├── px4_msgs/                  # 外部依赖，自己 clone，不进本仓库
     └── mid360_obstacle_stop/      ← ROS 2 package，详细文档见包内 README
@@ -37,6 +37,31 @@ mission-obstacle_ws/                ← 仓库根 = colcon workspace 根（目�
 
 `build/`、`install/`、`log/`、`bags/`（录制的 rosbag）和 `src/px4_msgs/` 都由 `.gitignore` 排除，
 仓库里只有 `src/` 下的源码。
+
+## 远端与镜像
+
+| 远端 | 地址 | 用途 |
+| --- | --- | --- |
+| `origin` | `https://github.com/JeroZe/mission-obstacle.git` | 主仓库 |
+| `gitee` | `https://gitee.com/JeroZe/mission-obstacle.git` | 国内镜像，网络不好时从这里拉 |
+
+```bash
+# 一次性配置镜像远端
+git remote add gitee https://gitee.com/JeroZe/mission-obstacle.git
+
+# 提交并推送到所有已配置的远端
+bash scripts/push.sh "feat: xxx"
+```
+
+机载端建议直接从 Gitee clone，快且稳：
+
+```bash
+git clone https://gitee.com/JeroZe/mission-obstacle.git ~/mission-obstacle
+```
+
+`px4_msgs` 不在本仓库里，需要单独获取。它必须与飞控固件版本对应（v1.16 → `release/1.16`），
+**第三方镜像不保证同步到正确的分支**，所以优先用官方源；GitHub 拉不动时，可以用 Gitee 的
+「导入仓库」把 `PX4/px4_msgs` 导到自己账号下再 clone，或者直接从已经拉好的机器上拷 `src/px4_msgs` 整个目录。
 
 ## 依赖
 
