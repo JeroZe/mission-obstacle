@@ -87,8 +87,14 @@ PAUSED ── auto_resume=true 且连续 clear_frames 帧安全 ──▶ RESUME
 2. **`paused_by_obstacle_` 归属标记**：只有本节点触发的 pause 才会自动 Continue；
    人工在 QGC 手动 Pause（或任何外部切模式）时本节点根本不会进入 PAUSED。
 3. **外部接管保护**：如果 Hold 期间 `nav_state` 被外部改变（人工恢复任务 / 切 POSCTL / RTL / failsafe），
-   本节点立即放弃归属，并进入 `suppress_until_clear`：**必须等障碍消失过一次**才允许再次自动 Pause，
-   不会出现“用户刚恢复、ROS 立刻又把它停住”的来回拉锯。
+   本节点立即放弃归属，并静默 `rearm_grace`（默认 5 s）：这段时间内不会自动 Pause，
+   不会出现“用户刚恢复、ROS 立刻又把它停住”的来回拉锯；静默结束后重新武装，
+   若障碍仍在危险圆柱内会再次 Pause。
+
+   > 这里**故意用时间而不是“等危险区清空”**。旧版用 `suppress_until_clear`（要求整个圆柱
+   > `resume_distance` 内无点），在走廊、树林、贴墙飞行或 `stop_distance` 设得较大时该条件
+   > 可能**永远不成立**，结果是飞手手动恢复一次之后，剩余航程完全失去保护，且没有任何提示。
+   > 时间窗是有界的，保护一定会回来。
 4. **ACK 之后的二次确认**：ACK ACCEPTED 后 `hold_confirm_timeout` 内若 `nav_state` 一直是 AUTO_MISSION，
    输出 ERROR 提示 PX4 可能没有真正进入 Hold（判定仍以 ACK 为准，不会误报 PAUSED）。
 5. **LiDAR watchdog**：超过 `lidar_timeout` 没有点云 → ERROR + 周期性 WARN；
@@ -121,6 +127,8 @@ PAUSED ── auto_resume=true 且连续 clear_frames 帧安全 ──▶ RESUME
 | `command_timeout` | `2.0` | 等待 VehicleCommandAck 的超时 [s] |
 | `command_retry_cooldown` | `2.0` | 失败后的重试冷却 [s] |
 | `hold_confirm_timeout` | `2.0` | ACK 后确认 nav_state 进入 Hold 的时间 [s] |
+| `rearm_grace` | `5.0` | 失去控制权（人工恢复 / 命令被拒）后静默多久再重新武装 [s]，`0` = 不静默 |
+| `diagnostic_period` | `0.0` | > 0 时每隔该秒数打印一行检测摘要（地面调试用） |
 
 除话题名和 `hold_method` 外，其余参数都支持运行时 `ros2 param set` 动态生效（非法值会被拒绝并给出原因）。
 

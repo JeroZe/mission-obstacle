@@ -22,14 +22,21 @@ PX4  VEHICLE_CMD_DO_REPOSITION(192) + NaN  →  AUTO_LOITER (Hold)
 ## 目录结构
 
 ```text
-mid360-obstacle/                  ← 仓库根 = colcon workspace
-├── push_to_github.sh             # 本仓库的推送脚本
-└── mid360_obstacle_stop/         ← ROS 2 package，详细文档见包内 README
-    ├── config/obstacle_stop.yaml # 全部参数（无 magic number）
-    ├── launch/                   # obstacle_stop.launch.py
-    ├── include/ src/             # detector / PX4 接口 / 状态机
-    └── README.md                 # ★ 接口核对依据、状态机、完整测试步骤
+mission-obstacle_ws/                ← 仓库根 = colcon workspace 根（目录名随意，示例用 xxx_ws）
+├── README.md
+├── .gitignore                     # build/ install/ log/ bags/ *.bag src/px4_msgs/
+├── scripts/push_to_github.sh      # 推送脚本
+└── src/                           # ★ 本仓库只跟踪这里的内容
+    ├── px4_msgs/                  # 外部依赖，自己 clone，不进本仓库
+    └── mid360_obstacle_stop/      ← ROS 2 package，详细文档见包内 README
+        ├── config/obstacle_stop.yaml  # 全部参数（无 magic number）
+        ├── launch/                    # obstacle_stop.launch.py
+        ├── include/ src/              # detector / PX4 接口 / 状态机
+        └── README.md                  # ★ 接口核对依据、状态机、完整测试步骤
 ```
+
+`build/`、`install/`、`log/`、`bags/`（录制的 rosbag）和 `src/px4_msgs/` 都由 `.gitignore` 排除，
+仓库里只有 `src/` 下的源码。
 
 ## 依赖
 
@@ -43,11 +50,11 @@ mid360-obstacle/                  ← 仓库根 = colcon workspace
 ## 编译
 
 ```bash
-mkdir -p ~/mid360-obstacle/src && cd ~/mid360-obstacle/src
+git clone https://github.com/JeroZe/mission-obstacle.git ~/mission-obstacle_ws
+cd ~/mission-obstacle_ws/src
 git clone -b release/1.16 https://github.com/PX4/px4_msgs.git px4_msgs
-git clone https://github.com/JeroZe/mission-obstacle.git mission-obstacle
 
-cd ~/mid360-obstacle
+cd ~/mission-obstacle_ws
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install --packages-select mid360_obstacle_stop
 source install/setup.bash
@@ -95,7 +102,7 @@ ros2 param set /mid360_obstacle_stop diagnostic_period 2.0
 ## 测试
 
 **先地面、后 SITL、最后才是实飞。** 完整的分步测试（Test 0 ~ Test 5，含期望日志）
-见 [`mid360_obstacle_stop/README.md`](mid360_obstacle_stop/README.md)。
+见 [`src/mid360_obstacle_stop/README.md`](src/mid360_obstacle_stop/README.md)。
 
 > 本包已在 ROS 2 Humble 上编译通过，但**尚未完成 SITL 与实机飞行验证**，
 > ACK 行为与刹车距离需要在台架上确认后再实飞。

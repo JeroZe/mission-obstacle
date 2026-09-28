@@ -1,5 +1,18 @@
+# --- macOS ---
 .DS_Store
+
+# --- colcon build output（不进 git）---
 build/
 install/
 log/
+
+# --- 大文件：录制的 rosbag ---
+bags/
+*.bag
+*.db3
+
+# --- 临时传输产物 ---
 *.zip
+
+# --- 外部依赖：单独 clone，不算本仓库内容 ---
+src/px4_msgs/

@@ -50,6 +50,14 @@ mid360_obstacle_stop:
     # 飞行中建议保持 0.0（关闭），避免刷日志
     diagnostic_period: 0.0
 
+    # ---------------- 失去控制权后的重新武装 ----------------
+    # 飞手在 QGC 手动恢复任务、或 PX4 拒绝命令后，本节点静默该时长，然后重新武装：
+    # 若障碍仍在危险圆柱内，会再次请求 Pause（保护不会永久消失）。
+    # 0.0 = 不静默，只受 command_retry_cooldown 限制。
+    # 不要改成“等危险区完全清空才重新武装”：在狭窄/多障碍环境里该条件可能永远不满足，
+    # 会让剩余航程完全失去保护（这正是旧版 suppress_until_clear 的缺陷）。
+    rearm_grace: 5.0
+
     # ---------------- PX4 命令行为 ----------------
     # do_reposition_hold: PX4 v1.16 原生做法，与 QGroundControl 的 Pause 按钮完全一致
     #   -> VEHICLE_CMD_DO_REPOSITION(192)，param2=CHANGE_MODE，lat/lon/alt=NaN

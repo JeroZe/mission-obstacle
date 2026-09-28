@@ -43,6 +43,7 @@ ObstacleStopNode::ObstacleStopNode(const rclcpp::NodeOptions & options)
   last_command_time_ = now();
   pause_ack_time_ = now();
   last_diagnostic_time_ = now();
+  rearm_time_ = now();
 
   detector_.setConfig(detector_config_);
   px4_ = std::make_unique<Px4CommandInterface>(
@@ -125,6 +126,7 @@ void ObstacleStopNode::loadParameters()
   command_retry_cooldown_ = declare_parameter<double>("command_retry_cooldown", 2.0);
   hold_confirm_timeout_ = declare_parameter<double>("hold_confirm_timeout", 2.0);
   diagnostic_period_ = declare_parameter<double>("diagnostic_period", 0.0);
+  rearm_grace_ = declare_parameter<double>("rearm_grace", 5.0);
 
   const int confirm_frames = declare_parameter<int>("confirm_frames", 3);
   const int clear_frames = declare_parameter<int>("clear_frames", 10);
@@ -188,6 +190,9 @@ void ObstacleStopNode::loadParameters()
   }
   if (diagnostic_period_ < 0.0) {
     diagnostic_period_ = 0.0;
+  }
+  if (rearm_grace_ < 0.0) {
+    rearm_grace_ = 0.0;
   }
 
   detector_config_ = config;
@@ -295,25 +300,35 @@ void ObstacleStopNode::updateStateMachine()
       asUnsigned(nav_state_), navStateName(nav_state_), stateName(state_));
   }
 
-  // Re-arm the automatic pause once the danger area has been clear again for a while. This is
-  // what stops the node from fighting a pilot who resumed the mission manually.
-  if (suppress_until_clear_ && clear_frame_count_ >= clear_frames_) {
-    suppress_until_clear_ = false;
-    RCLCPP_INFO(get_logger(), "Danger area clear again - automatic Mission PAUSE re-armed");
+  // After this node loses ownership of the mission (manual resume in QGroundControl, rejected
+  // command) the automatic pause is muted for a BOUNDED time window. It is deliberately time
+  // based and not "wait until the safety cylinder is clear": in a cluttered environment that
+  // condition may never become true, which used to silently disable the protection for the whole
+  // remaining flight.
+  if (rearm_pending_ && now_ts >= rearm_time_) {
+    rearm_pending_ = false;
+    RCLCPP_INFO(
+      get_logger(), "Automatic Mission PAUSE re-armed (%.1f s mute expired)", rearm_grace_);
   }
 
   switch (state_) {
     case StopState::kClear: {
-      if (suppress_until_clear_) {
-        break;
-      }
-      if (!commandCooldownElapsed(now_ts)) {
-        break;
-      }
-
       const bool obstacle_confirmed = obstacle_frames_ >= confirm_frames_;
       const bool lidar_timeout_trigger = lidar_timeout_stop_enabled_ && lidar_timeout_active_;
       if (!obstacle_confirmed && !lidar_timeout_trigger) {
+        break;
+      }
+
+      if (rearm_pending_) {
+        RCLCPP_INFO_THROTTLE(
+          get_logger(), *get_clock(), kThrottleMs,
+          "Obstacle/timeout present but the automatic Mission PAUSE is muted for another %.1f s "
+          "(this node lost ownership of the mission - see rearm_grace)",
+          rclcpp::Duration(rearm_time_ - now_ts).seconds());
+        break;
+      }
+
+      if (!commandCooldownElapsed(now_ts)) {
         break;
       }
 
@@ -492,15 +507,16 @@ void ObstacleStopNode::onCommandAck(bool accepted, uint8_t result, uint32_t comm
     if (result == px4_msgs::msg::VehicleCommandAck::VEHICLE_CMD_RESULT_UNSUPPORTED ||
       result == px4_msgs::msg::VehicleCommandAck::VEHICLE_CMD_RESULT_DENIED)
     {
-      // Never pretend to be paused: keep CLEAR and stop hammering an unsupported command.
-      suppress_until_clear_ = true;
+      // Never pretend to be paused: keep CLEAR and mute the automatic pause for a bounded window
+      // instead of disabling it until the (possibly unreachable) "danger area cleared" condition.
       state_ = StopState::kClear;
       RCLCPP_ERROR(
         get_logger(),
         "PX4 rejected the Mission PAUSE: ack=%s (hold_method='%s'). PX4 v1.16 does not implement "
         "MAV_CMD_DO_PAUSE_CONTINUE(193) - use hold_method='do_reposition_hold'. Automatic pause is "
-        "disabled until the danger area is clear again.",
-        ackResultName(result), holdMethodName(hold_method_));
+        "muted for %.1f s and will then be retried.",
+        ackResultName(result), holdMethodName(hold_method_), rearm_grace_);
+      armReArmGrace();
       return;
     }
 
@@ -562,7 +578,7 @@ void ObstacleStopNode::handleExternalHoldRelease()
   paused_by_obstacle_ = false;
   hold_confirmed_ = false;
   hold_state_unknown_ = false;
-  suppress_until_clear_ = true;  // only allow a new automatic pause after a clear period
+  armReArmGrace();  // never disable the protection permanently - see rearm_grace
   obstacle_frames_ = 0U;
   state_ = StopState::kClear;
 }
@@ -611,6 +627,7 @@ rcl_interfaces::msg::SetParametersResult ObstacleStopNode::onSetParameters(
   double command_retry_cooldown = command_retry_cooldown_;
   double hold_confirm_timeout = hold_confirm_timeout_;
   double diagnostic_period = diagnostic_period_;
+  double rearm_grace = rearm_grace_;
   int confirm_frames = static_cast<int>(confirm_frames_);
   int clear_frames = static_cast<int>(clear_frames_);
   bool auto_resume = auto_resume_;
@@ -649,6 +666,8 @@ rcl_interfaces::msg::SetParametersResult ObstacleStopNode::onSetParameters(
         hold_confirm_timeout = parameter.as_double();
       } else if (name == "diagnostic_period") {
         diagnostic_period = parameter.as_double();
+      } else if (name == "rearm_grace") {
+        rearm_grace = parameter.as_double();
       }
       // pointcloud_topic / vehicle_status_topic / vehicle_command_service / hold_method are
       // startup only (they would require recreating publishers/subscribers/services).
@@ -682,10 +701,11 @@ rcl_interfaces::msg::SetParametersResult ObstacleStopNode::onSetParameters(
     return result;
   }
   if (lidar_timeout <= 0.0 || command_timeout <= 0.0 || command_retry_cooldown < 0.0 ||
-    hold_confirm_timeout <= 0.0 || diagnostic_period < 0.0)
+    hold_confirm_timeout <= 0.0 || diagnostic_period < 0.0 || rearm_grace < 0.0)
   {
     result.successful = false;
-    result.reason = "timings must be > 0 (command_retry_cooldown >= 0, diagnostic_period >= 0)";
+    result.reason =
+      "timings must be > 0 (command_retry_cooldown, diagnostic_period, rearm_grace must be >= 0)";
     return result;
   }
 
@@ -697,6 +717,7 @@ rcl_interfaces::msg::SetParametersResult ObstacleStopNode::onSetParameters(
   command_retry_cooldown_ = command_retry_cooldown;
   hold_confirm_timeout_ = hold_confirm_timeout;
   diagnostic_period_ = diagnostic_period;
+  rearm_grace_ = rearm_grace;
   confirm_frames_ = static_cast<std::size_t>(confirm_frames);
   clear_frames_ = static_cast<std::size_t>(clear_frames);
   auto_resume_ = auto_resume;
@@ -706,10 +727,10 @@ rcl_interfaces::msg::SetParametersResult ObstacleStopNode::onSetParameters(
     get_logger(),
     "Parameters updated: stop_distance=%.2f m, resume_distance=%.2f m, min_obstacle_points=%d, "
     "confirm_frames=%zu, clear_frames=%zu, auto_resume=%s, lidar_timeout=%.2f s, "
-    "lidar_timeout_stop_enabled=%s",
+    "lidar_timeout_stop_enabled=%s, rearm_grace=%.1f s",
     detector_config_.stop_distance, resume_distance_, detector_config_.min_obstacle_points,
     confirm_frames_, clear_frames_, auto_resume_ ? "true" : "false", lidar_timeout_,
-    lidar_timeout_stop_enabled_ ? "true" : "false");
+    lidar_timeout_stop_enabled_ ? "true" : "false", rearm_grace_);
 
   return result;
 }
@@ -725,6 +746,15 @@ bool ObstacleStopNode::isPx4Mission() const
 bool ObstacleStopNode::commandCooldownElapsed(const rclcpp::Time & now_ts) const
 {
   return rclcpp::Duration(now_ts - last_command_time_).seconds() >= command_retry_cooldown_;
+}
+
+void ObstacleStopNode::armReArmGrace()
+{
+  rearm_pending_ = true;
+  rearm_time_ = now() + rclcpp::Duration::from_seconds(rearm_grace_);
+  RCLCPP_WARN(
+    get_logger(), "Automatic Mission PAUSE muted for %.1f s, then re-armed (rearm_grace)",
+    rearm_grace_);
 }
 
 const char * ObstacleStopNode::stateName(StopState state)

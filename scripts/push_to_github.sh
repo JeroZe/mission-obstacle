@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# 把当前目录（mid360_obstacle_stop 的 ROS 2 workspace）推到 GitHub。
+# 把当前 workspace（仓库根）推到 GitHub。
 #
-#   用法：  bash push_to_github.sh
+#   用法：  bash scripts/push_to_github.sh
 #   前提：  git 可用；对 https://github.com/JeroZe/mission-obstacle.git 有写权限
 #
 # 说明：
-#   * 仓库根目录 = 这个 workspace，包在 mid360_obstacle_stop/ 下。
-#     在 Ubuntu 上建议 clone 到 ~/mid360-obstacle/src/mission-obstacle，
-#     这样包路径是 src/mission-obstacle/mid360_obstacle_stop，和你现在的布局一致。
-#   * build/ install/ log/ *.zip 已在 .gitignore 里，不会提交。
+#   * 仓库根 = colcon workspace 根，只跟踪 src/ 下的源码；
+#     build/ install/ log/ bags/ *.bag 和 src/px4_msgs/ 都在 .gitignore 里，不会提交。
 
 set -euo pipefail
 
 REMOTE_URL="https://github.com/JeroZe/mission-obstacle.git"
 BRANCH="main"
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if ! git --version >/dev/null 2>&1; then
   echo "错误：git 不可用。macOS 上通常是 Xcode 许可协议没同意，先执行：" >&2

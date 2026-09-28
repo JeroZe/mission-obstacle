@@ -71,6 +71,7 @@ private:
   void requestMissionPause(const std::string & reason);
   void requestMissionContinue();
   void handleExternalHoldRelease();
+  void armReArmGrace();
   bool isPx4Mission() const;
   bool commandCooldownElapsed(const rclcpp::Time & now) const;
   void checkLidarTimeout();
@@ -100,6 +101,7 @@ private:
   double command_retry_cooldown_{2.0};
   double hold_confirm_timeout_{2.0};
   double diagnostic_period_{0.0};   // > 0: print one detection summary line per period [s]
+  double rearm_grace_{5.0};         // [s] mute window after this node loses mission ownership
 
   // ------------------------------------------------------------- ROS interfaces
   rclcpp::CallbackGroup::SharedPtr callback_group_;
@@ -134,7 +136,8 @@ private:
   rclcpp::Time pause_ack_time_;      // when the pause was accepted
   rclcpp::Time last_diagnostic_time_;  // last periodic detection summary
 
-  bool suppress_until_clear_{false}; // do not auto-pause again until the danger area is clear
+  bool rearm_pending_{false};   // automatic pause muted until rearm_time_
+  rclcpp::Time rearm_time_;     // when the mute expires
 };
 
 }  // namespace mid360_obstacle_stop
