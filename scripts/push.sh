@@ -6,8 +6,8 @@
 #   前提：  git 可用；对远端仓库有写权限
 #
 # 远端：
-#   origin  https://github.com/JeroZe/mission-obstacle.git   主仓库
-#   gitee   https://gitee.com/JeroZe/mission-obstacle.git     国内镜像（可选）
+#   origin  https://github.com/JeroZe/mission-obstacle.git    主仓库
+#   gitee   https://gitee.com/JeroZhang/mission-obstacle.git  国内镜像（可选）
 #
 #   任一远端缺失会被跳过，任一远端失败不影响其它远端 —— 镜像的意义就是冗余。
 #
@@ -52,7 +52,7 @@ done
 if [ "${#REMOTES[@]}" -eq 0 ]; then
   echo "错误：没有配置任何远端，先执行：" >&2
   echo "    git remote add origin https://github.com/JeroZe/mission-obstacle.git" >&2
-  echo "    git remote add gitee  https://gitee.com/JeroZe/mission-obstacle.git" >&2
+  echo "    git remote add gitee  https://gitee.com/JeroZhang/mission-obstacle.git" >&2
   exit 1
 fi
 

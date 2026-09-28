@@ -43,23 +43,24 @@ mission-obstacle_ws/                ← 仓库根 = colcon workspace 根（目�
 | 远端 | 地址 | 用途 |
 | --- | --- | --- |
 | `origin` | `https://github.com/JeroZe/mission-obstacle.git` | 主仓库（已启用） |
-| `gitee` | `https://gitee.com/<Gitee 空间地址>/mission-obstacle.git` | 可选国内镜像，**尚未启用** |
+| `gitee` | `https://gitee.com/JeroZhang/mission-obstacle.git` | 国内镜像（已启用） |
 
 `scripts/push.sh` 会推送到**所有已配置的远端**，任一远端失败不影响其它远端；
-没有配置 `gitee` 时只打印一行提示，不会报错。等 Gitee 账号和仓库准备好之后再启用：
+没有配置 `gitee` 时会自动跳过。启用镜像远端：
 
 ```bash
-git remote add gitee https://gitee.com/<空间地址>/mission-obstacle.git
+git remote add gitee https://gitee.com/JeroZhang/mission-obstacle.git
 bash scripts/push.sh "chore: 启用 Gitee 镜像"
 ```
 
-启用后机载端可以从 Gitee 拉（国内速度更快）：
+机载端从 Gitee 拉（国内速度更快）：
 
 ```bash
-git clone https://gitee.com/<空间地址>/mission-obstacle.git ~/mission-obstacle
+git clone https://gitee.com/JeroZhang/mission-obstacle.git ~/mission-obstacle
 ```
 
 > Gitee 的 https 推送若开了两步验证，密码栏要填**私人令牌**而不是登录密码。
+> 若 Gitee 仓库首页显示的默认分支仍是 `master`，去「仓库设置 → 默认分支」改成 `main`。
 
 `px4_msgs` 不在本仓库里，需要单独获取。它必须与飞控固件版本对应（v1.16 → `release/1.16`），
 **第三方镜像不保证同步到正确的分支**，所以优先用官方源；GitHub 拉不动时，可以用 Gitee 的
