@@ -242,6 +242,53 @@ ros2 param set /mid360_obstacle_stop diagnostic_period 2.0
 
 5. 关掉诊断日志：`ros2 param set /mid360_obstacle_stop diagnostic_period 0.0`
 
+### Test 0b：无雷达台架测试（合成点云）
+
+手边没有 MID360、或者不想等雷达装好，可以用合成点云跑通整条链路：
+
+```bash
+ros2 run mid360_obstacle_stop fake_obstacle_publisher.py
+# 运行时"放/收"障碍（0.0 = 无障碍）
+ros2 param set /fake_obstacle_publisher obstacle_distance 2.0
+ros2 param set /fake_obstacle_publisher obstacle_distance 0.0
+```
+
+它替代 Test 1/2/3/4 里"把纸箱靠近 MID360"那一步：
+
+| 能验证 | 不能验证 |
+| --- | --- |
+| 点云解析、ROI 判定、连续帧确认 | Livox 驱动的真实字段与坐标系 |
+| 状态机 CLEAR → PAUSE_PENDING → PAUSED | 机体自身点云误报（起落架 / 天线 / 桨叶） |
+| PX4 命令、ACK、nav_state 3 → 4 | 真实点云的帧率、延迟、丢帧 |
+| 防重复命令、`rearm_grace`、人工接管保护 | 刹车距离（必须带桨台架或实机） |
+
+> 要验证"真的发出暂停命令并进入 Hold"，**仍然需要 PX4**：真机飞控通电（拆桨）且任务处于
+> `AUTO_MISSION`，或者 SITL。没有 PX4 时只会看到 `no PX4 VehicleStatus ... inhibited` 这类日志。
+
+连飞控也不想接的话，还有一个**假 PX4 桩**，它模仿 PX4 v1.16 对命令的反应：
+
+```bash
+ros2 run mid360_obstacle_stop fake_px4_stub.py
+# 模拟 PX4 拒绝命令（验证 rearm_grace 静默与重试）
+ros2 run mid360_obstacle_stop fake_px4_stub.py --ros-args -p reject_pause:=true
+# 模拟 ACK 超时（验证 command_timeout 后回到 CLEAR）
+ros2 run mid360_obstacle_stop fake_px4_stub.py --ros-args -p ack_delay_s:=5.0
+# 模拟 ACK 了但迟迟不进 Hold（验证 hold_confirm_timeout 的 ERROR）
+ros2 run mid360_obstacle_stop fake_px4_stub.py --ros-args -p hold_delay_s:=10.0
+```
+
+配合上面的假点云，板卡上不需要雷达、不需要飞控就能跑完 Test 2 / 3 / 4 的逻辑部分：
+
+```bash
+ros2 run mid360_obstacle_stop fake_px4_stub.py        # 终端 1
+ros2 launch mid360_obstacle_stop obstacle_stop.launch.py   # 终端 2
+ros2 run mid360_obstacle_stop fake_obstacle_publisher.py   # 终端 3
+ros2 param set /fake_obstacle_publisher obstacle_distance 2.0   # 终端 4
+```
+
+> 桩只能验证**本节点的逻辑**（状态机、ACK 处理、命令去重）。PX4 真实的 ACK 行为、
+> 刹车距离、模式切换时序仍然必须在 SITL 和真机上验证。
+
 ### Test 1：纯点云测试（不接 PX4）
 
 1. 启动 `livox_ros_driver2` 与本节点（PX4 可以不连）。

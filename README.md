@@ -132,5 +132,13 @@ ros2 param set /mid360_obstacle_stop diagnostic_period 2.0
 **先地面、后 SITL、最后才是实飞。** 完整的分步测试（Test 0 ~ Test 5，含期望日志）
 见 [`src/mid360_obstacle_stop/README.md`](src/mid360_obstacle_stop/README.md)。
 
+没有雷达也能测：`ros2 run mid360_obstacle_stop fake_obstacle_publisher.py` 会在 `/livox/lidar`
+上发合成点云，配合 `obstacle_distance` 参数随时"放/收"障碍，用来验证感知、状态机、
+PX4 命令与 ACK 的整条链路。
+
+连飞控也不想接时，`ros2 run mid360_obstacle_stop fake_px4_stub.py` 会扮演 PX4
+（发布 `VehicleStatus` + 提供 `/fmu/vehicle_command` 服务，对 pause/continue 命令回 ACCEPTED
+并切换 nav_state），这样雷达、飞控都不需要就能验证状态机和命令逻辑。
+
 > 本包已在 ROS 2 Humble 上编译通过，但**尚未完成 SITL 与实机飞行验证**，
 > ACK 行为与刹车距离需要在台架上确认后再实飞。

@@ -1,6 +1,9 @@
 # --- macOS ---
 .DS_Store
 
+# --- 编辑器：里含本机绝对路径，不进仓库 ---
+.vscode/
+
 # --- colcon build output（不进 git）---
 build/
 install/

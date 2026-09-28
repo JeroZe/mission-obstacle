@@ -45,4 +45,10 @@ install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/fake_obstacle_publisher.py
+  scripts/fake_px4_stub.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
